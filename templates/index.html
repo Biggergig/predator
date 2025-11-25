@@ -1,13 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PREDATOR CONTROL SYSTEM</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;500;700&display=swap"
+        rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
 </head>
+
 <body>
     <div class="scanlines"></div>
     <div class="overlay"></div>
@@ -55,56 +59,80 @@
         var manager = nipplejs.create({
             zone: document.getElementById('joystick-zone'),
             mode: 'static',
-            position: {left: '50%', top: '50%'},
+            position: { left: '50%', top: '50%' },
             color: '#00f3ff',
             size: 150
         });
 
         // --- Drive Logic ---
-        let lastX = 0;
-        let lastY = 0;
+        // --- Drive Logic ---
+        let currentX = 0;
+        let currentY = 0;
+        let lastSentX = null;
+        let lastSentY = null;
 
+        // Update target values on joystick move
         manager.on('move', function (evt, data) {
             if (data.vector) {
-                // NippleJS returns vector.y as up (positive), which matches our logic
-                // But we need to throttle updates to not flood the server
-                const x = data.vector.x;
-                const y = data.vector.y;
-                sendDriveCommand(x, y);
-                updateUI(x, y);
+                currentX = data.vector.x;
+                currentY = data.vector.y;
+                updateUI(currentX, currentY);
             }
         });
 
+        // Stop immediately on release
         manager.on('end', function () {
-            sendDriveCommand(0, 0);
+            currentX = 0;
+            currentY = 0;
             updateUI(0, 0);
+            sendDriveCommand(); // Force immediate send
         });
 
         // Keyboard Controls
         document.addEventListener('keydown', (e) => {
-            if(e.key === 'ArrowUp') sendDriveCommand(0, 1);
-            if(e.key === 'ArrowDown') sendDriveCommand(0, -1);
-            if(e.key === 'ArrowLeft') sendDriveCommand(-1, 0);
-            if(e.key === 'ArrowRight') sendDriveCommand(1, 0);
-            if(e.key === ' ') stopCar();
-        });
-        
-        document.addEventListener('keyup', (e) => {
-             if(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
-                 sendDriveCommand(0, 0);
-             }
+            if (e.key === 'ArrowUp') { currentX = 0; currentY = 1; }
+            if (e.key === 'ArrowDown') { currentX = 0; currentY = -1; }
+            if (e.key === 'ArrowLeft') { currentX = -1; currentY = 0; }
+            if (e.key === 'ArrowRight') { currentX = 1; currentY = 0; }
+            if (e.key === ' ') stopCar();
+
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                updateUI(currentX, currentY);
+                // For keyboard, we can send immediately or let the loop handle it.
+                // Let's let the loop handle it to be consistent, but maybe force if needed.
+            }
         });
 
-        function sendDriveCommand(x, y) {
+        document.addEventListener('keyup', (e) => {
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                currentX = 0;
+                currentY = 0;
+                updateUI(0, 0);
+                sendDriveCommand(); // Force stop
+            }
+        });
+
+        // Throttled Sender Loop (10Hz)
+        setInterval(() => {
+            // Only send if values changed
+            if (currentX !== lastSentX || currentY !== lastSentY) {
+                sendDriveCommand();
+            }
+        }, 100);
+
+        function sendDriveCommand() {
+            lastSentX = currentX;
+            lastSentY = currentY;
+
             fetch('/api/drive', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({x: x, y: y})
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ x: currentX, y: currentY })
             });
         }
 
         function stopCar() {
-            fetch('/api/stop', {method: 'POST'});
+            fetch('/api/stop', { method: 'POST' });
         }
 
         function toggleGpio(pin, btn) {
@@ -112,8 +140,8 @@
             const val = btn.classList.contains('active') ? 1 : 0;
             fetch('/api/gpio', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({pin: pin, value: val})
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pin: pin, value: val })
             });
         }
 
@@ -123,7 +151,7 @@
             document.getElementById('throttle-fill').style.height = throttle + '%';
             document.getElementById('throttle-val').innerText = Math.round(throttle) + '%';
         }
-        
+
         // Mock Connection Check
         setTimeout(() => {
             const el = document.getElementById('connection-status');
@@ -133,4 +161,5 @@
 
     </script>
 </body>
+
 </html>

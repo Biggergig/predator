@@ -6,7 +6,7 @@ app = Flask(__name__)
 
 # --- Configuration ---
 # REPLACE WITH YOUR PI'S IP ADDRESS
-PI_IP = "192.168.1.100" 
+PI_IP = "192.168.1.135"
 
 # Pin Configuration (Forward, Backward, Enable)
 LEFT_PINS = (17, 27, 22)
